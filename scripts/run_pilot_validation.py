@@ -9,7 +9,7 @@ into separate classes directories with javac, then runs the
 dual-classloader probe (Stage 7, channel-detail path) against both and
 checks the verdict matches what the fixture is named for.
 
-Usage: python scripts/run_pilot_validation.py
+Usage: uv run python scripts/run_pilot_validation.py
 Requires: a JDK with `javac` on PATH (or EFSR_JAVAC_BIN set), and
 efsr/difftest/harness/dist/dualrunner.jar built (see harness/build.sh).
 """

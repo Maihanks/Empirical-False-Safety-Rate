@@ -28,10 +28,15 @@ tests/                      pytest suite for everything that doesn't require a f
 
 ## Quick start
 
+Dependencies and the virtual environment are managed with [uv](https://docs.astral.sh/uv/) (a `uv.lock` is committed for reproducible installs):
+
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -e .
-.venv/bin/pytest tests/ -q
+uv sync --all-groups   # creates .venv and installs runtime + dev (pytest) dependencies
+uv run pytest tests/ -q
 ```
+
+Run any script the same way, e.g. `uv run python scripts/run_pilot_validation.py`.
+`uv add <package>` / `uv remove <package>` update `pyproject.toml` and `uv.lock` together.
 
 Most of the pipeline's correctness logic (EFSR/Wilson CI, the three-check
 protocol, non-determinism screening, taxonomy classification, the JUnit

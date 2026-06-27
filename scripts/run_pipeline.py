@@ -23,7 +23,7 @@ Manifest schema (list of objects):
     "generation_index": 0
   }
 
-Usage: python scripts/run_pipeline.py manifest.json [--limit N]
+Usage: uv run python scripts/run_pipeline.py manifest.json [--limit N]
 """
 from __future__ import annotations
 

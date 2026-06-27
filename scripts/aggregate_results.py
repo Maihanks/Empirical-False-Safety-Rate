@@ -3,7 +3,7 @@
 the article (Section V), plus the pairwise between-process comparisons of
 RQ2 and the divergence-taxonomy distribution.
 
-Usage: python scripts/aggregate_results.py [--csv path] [--out results/tables]
+Usage: uv run python scripts/aggregate_results.py [--csv path] [--out results/tables]
 """
 from __future__ import annotations
 
