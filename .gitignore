@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Compiled Java artifacts (build harness/build.sh to regenerate)
+efsr/difftest/harness/dist/
+fixtures/**/classes/
+
+# Generated transformations / differential-test output / pipeline results
+data/*
+!data/.gitkeep
+results/csv/*
+!results/csv/.gitkeep
+results/tables/*
+!results/tables/.gitkeep
+efsr-diff-tests/
