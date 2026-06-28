@@ -47,11 +47,37 @@ class PipelineConfig:
             str(Path(__file__).resolve().parent / "difftest" / "harness" / "dist" / "dualrunner.jar"),
         )
     )
+    jdeodorant_jar: Path | None = field(default_factory=lambda: _env_path("EFSR_JDEODORANT_JAR", None))
+    refactoringminer_binary: str = field(
+        default_factory=lambda: os.environ.get("EFSR_REFACTORINGMINER_BIN", "RefactoringMiner")
+    )
 
     # Differential test generation budget (Stage 6)
     search_budget_seconds: int = field(default_factory=lambda: _env_int("EFSR_SEARCH_BUDGET_S", 120))
     randoop_time_limit_seconds: int = field(default_factory=lambda: _env_int("EFSR_RANDOOP_TIME_LIMIT_S", 120))
     generation_seed: int = field(default_factory=lambda: _env_int("EFSR_SEED", 42))
+
+    # metric(T) method-count gate (Section III-B): for Extract Method/Long
+    # Method, the originating method's CC must strictly drop, and the
+    # class's method count may grow by at most this many members -- the
+    # paper's qualitative "not beyond the extracted members" bound, made
+    # concrete and configurable since the paper does not fix a number.
+    max_extracted_methods: int = field(default_factory=lambda: _env_int("EFSR_MAX_EXTRACTED_METHODS", 5))
+
+    # Corpus construction (Section III-C): smell-detection thresholds and
+    # the JaCoCo line-coverage gate.
+    long_method_cc_threshold: float = field(default_factory=lambda: _env_float("EFSR_LONG_METHOD_CC", 10.0))
+    long_method_loc_threshold: float = field(default_factory=lambda: _env_float("EFSR_LONG_METHOD_LOC", 50.0))
+    large_class_wmc_threshold: float = field(default_factory=lambda: _env_float("EFSR_LARGE_CLASS_WMC", 47.0))
+    large_class_nom_threshold: float = field(default_factory=lambda: _env_float("EFSR_LARGE_CLASS_NOM", 20.0))
+    large_class_loc_threshold: float = field(default_factory=lambda: _env_float("EFSR_LARGE_CLASS_LOC", 300.0))
+    min_line_coverage: float = field(default_factory=lambda: _env_float("EFSR_MIN_LINE_COVERAGE", 0.6))
+
+    # Generation (Section III-D): LLM strategies are sampled this many
+    # times at temperature-zero decoding; the best of the protocol-passing
+    # generations is retained (efsr.selection).
+    llm_samples_per_target: int = field(default_factory=lambda: _env_int("EFSR_LLM_SAMPLES", 3))
+    llm_temperature: float = field(default_factory=lambda: _env_float("EFSR_LLM_TEMPERATURE", 0.0))
 
     # Replay / confirmation (Stage 8)
     replay_repetitions: int = field(default_factory=lambda: _env_int("EFSR_REPLAY_REPETITIONS", 5))

@@ -15,10 +15,16 @@ corresponding ResultRow.
 
 Precedence when multiple channels differ in the same probe: exception
 differences are reported first (a thrown/missing exception is the
-strongest, least ambiguous signal), then return value, then state. The
-Interface/API category cannot be produced by the generic probes in this
-repository (it requires collaborator instrumentation specific to a target)
-and is only ever assigned manually.
+strongest, least ambiguous signal), then return value, then interaction,
+then state. The Interface/API category is produced automatically by the
+dual-classloader probe (`efsr.difftest.dual_harness`) for collaborator
+fields whose declared type is an interface -- DualRunner.java proxies
+those fields to record each call made through them (Section III-G); a
+collaborator held in a concrete-typed field is not instrumented and any
+resulting behavioural difference is only visible via the State channel
+instead. The JUnit-suite diff path (EvoSuite/Randoop-generated tests) has
+no equivalent instrumentation, so Interface/API divergences are only
+detected there if a human reviewer reclassifies a flagged candidate.
 """
 from __future__ import annotations
 
@@ -26,10 +32,11 @@ from efsr.difftest.dual_harness import ChannelDiff
 from efsr.difftest.junit_diff import CandidateDivergence
 from efsr.results import TaxonomyCategory
 
-_PRECEDENCE = ("exception", "return_value", "state")
+_PRECEDENCE = ("exception", "return_value", "interaction", "state")
 _CATEGORY_BY_CHANNEL = {
     "exception": TaxonomyCategory.EXCEPTIONAL,
     "return_value": TaxonomyCategory.FUNCTIONAL,
+    "interaction": TaxonomyCategory.INTERFACE_API,
     "state": TaxonomyCategory.STATE,
 }
 

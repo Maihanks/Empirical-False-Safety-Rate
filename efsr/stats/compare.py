@@ -41,7 +41,7 @@ def per_project_rates(rows: list[dict], process: str, project_key: str = "target
     """EFSR per project for one process, keyed by a project identifier
     derived from `target_id` (assumed of the form "<project>:<rest>").
     """
-    from efsr.stats.efsr import compute_efsr, _to_bool
+    from efsr.stats.efsr import compute_efsr, _retained, _to_bool
 
     by_project: dict[str, list[dict]] = {}
     for r in rows:
@@ -52,7 +52,10 @@ def per_project_rates(rows: list[dict], process: str, project_key: str = "target
 
     rates: dict[str, float] = {}
     for project, project_rows in by_project.items():
-        pi_s = [r for r in project_rows if _to_bool(r.get("admitted")) and not _to_bool(r.get("excluded_nondeterministic"))]
+        pi_s = [
+            r for r in project_rows
+            if _to_bool(r.get("admitted")) and _retained(r) and not _to_bool(r.get("excluded_nondeterministic"))
+        ]
         usable = [r for r in pi_s if r.get("verdict") != "ERROR"]
         if not usable:
             continue

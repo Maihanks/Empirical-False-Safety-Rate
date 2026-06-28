@@ -15,10 +15,12 @@ only rather than as a confirmatory finding.
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+import statsmodels.api as sm
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.preprocessing import StandardScaler
 from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -65,6 +67,50 @@ def variance_inflation(df: pd.DataFrame, vif_threshold: float = 10.0) -> tuple[d
     return vifs, dropped
 
 
+def _refit_unpenalised_for_inference(
+    X: pd.DataFrame, X_scaled: np.ndarray, y: np.ndarray,
+    all_columns: list[str], selected_names: list[str],
+) -> list[PredictorRow]:
+    """Relaxed-LASSO-style inference: L1 selects which predictors matter
+    (above, in fit_l1_logistic); this refits an *unpenalised* logistic
+    regression restricted to exactly those predictors to get unbiased
+    coefficients and Wald confidence intervals -- LogisticRegressionCV's
+    shrunk coefficients have no closed-form standard error, so they cannot
+    support the "Coefficient / Odds ratio / 95% CI" columns Table II
+    requires on their own.
+    """
+    if not selected_names:
+        return []
+
+    selected_idx = [all_columns.index(name) for name in selected_names]
+    X_selected = sm.add_constant(X_scaled[:, selected_idx])
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            refit = sm.Logit(y, X_selected).fit(disp=0, maxiter=200)
+    except Exception:
+        # Perfect separation or non-convergence on the selected subset --
+        # report the predictor as retained (by L1) but without inferential
+        # CIs rather than fabricating a number.
+        return [
+            PredictorRow(name=name, coefficient=float("nan"), odds_ratio=float("nan"),
+                          ci_low=float("nan"), ci_high=float("nan"))
+            for name in selected_names
+        ]
+
+    params = refit.params[1:]  # drop the intercept
+    conf_int = refit.conf_int(alpha=0.05)[1:]
+
+    rows = []
+    for name, coef, (ci_lo, ci_hi) in zip(selected_names, params, conf_int):
+        rows.append(PredictorRow(
+            name=name, coefficient=float(coef), odds_ratio=float(np.exp(coef)),
+            ci_low=float(np.exp(ci_lo)), ci_high=float(np.exp(ci_hi)),
+        ))
+    return rows
+
+
 def fit_l1_logistic(
     df: pd.DataFrame,
     y: np.ndarray,
@@ -100,21 +146,8 @@ def fit_l1_logistic(
     )
     model.fit(X_scaled, y)
 
-    retained_rows = []
-    for name, coef in zip(retained_columns, model.coef_[0]):
-        if abs(coef) < 1e-8:
-            continue
-        odds_ratio = float(np.exp(coef))
-        # Approximate 95% CI on the odds ratio via the model's own standard
-        # error is not directly available from LogisticRegressionCV; report
-        # the point odds ratio and flag CI as unavailable until a refit
-        # with statsmodels.Logit (unpenalised, on the retained subset) is
-        # performed for inference -- left as a follow-up call in the
-        # analysis script once `retained_columns` is known.
-        retained_rows.append(PredictorRow(
-            name=name, coefficient=float(coef), odds_ratio=odds_ratio,
-            ci_low=float("nan"), ci_high=float("nan"),
-        ))
+    selected_names = [name for name, coef in zip(retained_columns, model.coef_[0]) if abs(coef) >= 1e-8]
+    retained_rows = _refit_unpenalised_for_inference(X, X_scaled, y, retained_columns, selected_names)
 
     n_retained = len(retained_rows)
     epv_achieved = n_events / n_retained if n_retained else float("inf")
@@ -133,11 +166,11 @@ def build_predictor_frame(rows: list[dict]) -> tuple[pd.DataFrame, np.ndarray]:
     Only rows admitted to Pi(S) and not a priori excluded are eligible
     (matching the EFSR denominator); y = 1 iff verdict == DIVERGE.
     """
-    from efsr.stats.efsr import _to_bool
+    from efsr.stats.efsr import _retained, _to_bool
 
     eligible = [
         r for r in rows
-        if _to_bool(r.get("admitted")) and not _to_bool(r.get("excluded_nondeterministic"))
+        if _to_bool(r.get("admitted")) and _retained(r) and not _to_bool(r.get("excluded_nondeterministic"))
         and r.get("verdict") != "ERROR"
     ]
     df = pd.DataFrame(eligible)

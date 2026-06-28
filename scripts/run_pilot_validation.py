@@ -34,14 +34,26 @@ CASES = [
     dict(
         name="known_equivalent",
         class_name="fixtures.pilot.known_equivalent.Range",
+        method_name="clamp",
         expect_diverge=False,
+        expect_category=None,
         probe_values=[("I:0,I:10,I:5", "interior value"), ("I:0,I:10,I:15", "above-range value")],
     ),
     dict(
         name="known_divergent",
         class_name="fixtures.pilot.known_divergent.Range",
+        method_name="clamp",
         expect_diverge=True,
+        expect_category="Functional",
         probe_values=[("I:0,I:10,I:15", "above-range value (exposes the off-by-one bug)")],
+    ),
+    dict(
+        name="known_interaction_divergent",
+        class_name="fixtures.pilot.known_interaction_divergent.Notifier",
+        method_name="notify",
+        expect_diverge=True,
+        expect_category="Interface/API",
+        probe_values=[("I:7", "logged message format differs, return value does not")],
     ),
 ]
 
@@ -79,24 +91,29 @@ def main() -> int:
 
         print(f"\n=== {case['name']} (expect_diverge={case['expect_diverge']}) ===")
         case_diverged = False
+        observed_category = None
         for arg_spec, description in case["probe_values"]:
             diffs = run_dual_probe(
                 str(original_classes), str(modified_classes), case["class_name"],
-                "clamp", arg_spec, DEFAULT_CONFIG.replay_repetitions, DEFAULT_CONFIG,
+                case["method_name"], arg_spec, DEFAULT_CONFIG.replay_repetitions, DEFAULT_CONFIG,
             )
             confirmed = confirm_channel_diffs(diffs)
             label = "DIVERGE" if confirmed else "NO_DIFFERENCE"
             extra = ""
             if confirmed:
                 category, channel = classify_channel_diff(diffs[0])
+                observed_category = category.value
                 extra = f" (category={category.value}, channel={channel})"
             print(f"  probe[{description}] arg_spec={arg_spec!r} -> {label}{extra}")
             case_diverged = case_diverged or confirmed
 
         expected = case["expect_diverge"]
         ok = case_diverged == expected
+        if ok and case["expect_category"] is not None:
+            ok = observed_category == case["expect_category"]
         print(f"  result: {'PASS' if ok else 'FAIL'} "
-              f"(observed_diverge={case_diverged}, expected_diverge={expected})")
+              f"(observed_diverge={case_diverged}, expected_diverge={expected}, "
+              f"observed_category={observed_category}, expected_category={case['expect_category']})")
         all_passed = all_passed and ok
 
     print(f"\nPilot validation: {'PASSED' if all_passed else 'FAILED'}")

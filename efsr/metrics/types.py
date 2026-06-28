@@ -20,11 +20,16 @@ class StructuralMetrics:
     lcom: Optional[float] = None   # lack of cohesion of methods
     dit: Optional[float] = None    # depth of inheritance tree
     loc: Optional[float] = None    # lines of code
+    nom: Optional[float] = None    # number of declared methods (metric(T) gate only, not an RQ3 predictor)
 
     def as_dict(self) -> dict:
         return {
             "cc": self.cc, "wmc": self.wmc, "ce": self.ce, "cbo": self.cbo,
             "rfc": self.rfc, "lcom": self.lcom, "dit": self.dit, "loc": self.loc,
+            "nom": self.nom,
         }
 
+    # The RQ3 candidate predictor panel (Section III-H) is fixed to exactly
+    # these eight; `nom` is deliberately excluded -- it exists only to
+    # support the metric(T) method-count gate in Section III-B.
     PREDICTOR_NAMES = ("cc", "wmc", "ce", "cbo", "rfc", "lcom", "dit", "loc")

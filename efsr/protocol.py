@@ -74,20 +74,28 @@ class ProtocolResult:
 
 
 def evaluate_metric(
-    pre: StructuralMetrics, post: StructuralMetrics, refactoring_type: RefactoringType
+    pre: StructuralMetrics, post: StructuralMetrics, refactoring_type: RefactoringType,
+    config: PipelineConfig = DEFAULT_CONFIG,
 ) -> bool:
     """metric(T): Section III-B / Stage 3.
 
     Extract Method / Long Method  -> strict reduction in the originating
-        method's cyclomatic complexity (no requirement on method count
-        beyond what the extraction itself implies).
+        method's cyclomatic complexity, AND the class's method count may
+        not grow by more than `config.max_extracted_methods` -- the
+        paper's "without an increase in the method count beyond the
+        extracted members" clause, operationalised as a configurable
+        bound since the paper does not fix a number.
     Extract Class / Large Class   -> strict reduction in WMC of the source
         class AND non-increase of its efferent coupling (Ce).
     """
     if refactoring_type in _METHOD_LEVEL_TYPES:
         if pre.cc is None or post.cc is None:
             raise ValueError("cyclomatic complexity (cc) required for method-level metric(T)")
-        return post.cc < pre.cc
+        cc_improved = post.cc < pre.cc
+        if pre.nom is None or post.nom is None:
+            raise ValueError("method count (nom) required for method-level metric(T)")
+        method_count_bounded = (post.nom - pre.nom) <= config.max_extracted_methods
+        return cc_improved and method_count_bounded
     if refactoring_type in _CLASS_LEVEL_TYPES:
         if pre.wmc is None or post.wmc is None or pre.ce is None or post.ce is None:
             raise ValueError("wmc and ce required for class-level metric(T)")
@@ -136,7 +144,7 @@ class ThreeCheckProtocol:
             )
 
         try:
-            metric_passed = evaluate_metric(pre_metrics, post_metrics, spec.refactoring_type)
+            metric_passed = evaluate_metric(pre_metrics, post_metrics, spec.refactoring_type, self.config)
         except ValueError as exc:
             return ProtocolResult(
                 compile_status=CheckStatus.PASS,

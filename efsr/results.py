@@ -26,6 +26,7 @@ class CheckStatus(str, Enum):
 
 class Verdict(str, Enum):
     NOT_ADMITTED = "NOT_ADMITTED"      # failed compile/tests/metric -> never enters Pi(S)
+    NOT_RETAINED = "NOT_RETAINED"        # protocol-passing but not the selected output (Section III-D)
     EXCLUDED = "EXCLUDED"               # admitted but excluded a priori (Stage 5, non-determinism)
     DIVERGE = "DIVERGE"                 # confirmed behavioural divergence (false-safe instance)
     NO_DIFFERENCE = "NO_DIFFERENCE"      # no divergence detected within budget (not proven equivalent)
@@ -52,6 +53,7 @@ FIELDNAMES = [
     "tests_status",
     "metric_status",
     "admitted",
+    "retained",
     "excluded_nondeterministic",
     "exclusion_reason",
     "cc", "wmc", "ce", "cbo", "rfc", "lcom", "dit", "loc",
@@ -79,6 +81,11 @@ class ResultRow:
     tests_status: str = CheckStatus.SKIP.value
     metric_status: str = CheckStatus.SKIP.value
     admitted: bool = False
+    # True unless this row is a protocol-passing generation that lost the
+    # Section III-D retained-output selection to a sibling generation of
+    # the same (process, target); non-LLM processes (single generation per
+    # target) are trivially always retained.
+    retained: bool = True
 
     excluded_nondeterministic: bool = False
     exclusion_reason: str = ""

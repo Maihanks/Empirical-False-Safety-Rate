@@ -24,16 +24,22 @@ class ChannelDiff:
     return_differs: bool
     exception_differs: bool
     state_differs: bool
+    interaction_differs: bool
     return_orig: str | None
     return_mod: str | None
     exc_orig: str | None
     exc_mod: str | None
     state_orig: str | None
     state_mod: str | None
+    interaction_orig: str | None
+    interaction_mod: str | None
 
     @property
     def any_differs(self) -> bool:
-        return self.return_differs or self.exception_differs or self.state_differs
+        return (
+            self.return_differs or self.exception_differs
+            or self.state_differs or self.interaction_differs
+        )
 
     @property
     def differing_channels(self) -> list[str]:
@@ -42,6 +48,8 @@ class ChannelDiff:
             channels.append("return_value")
         if self.exception_differs:
             channels.append("exception")
+        if self.interaction_differs:
+            channels.append("interaction")
         if self.state_differs:
             channels.append("state")
         return channels
@@ -89,12 +97,15 @@ def run_dual_probe(
                 return_differs=obj.get("return_orig") != obj.get("return_mod"),
                 exception_differs=obj.get("exc_orig") != obj.get("exc_mod"),
                 state_differs=obj.get("state_orig") != obj.get("state_mod"),
+                interaction_differs=obj.get("interaction_orig") != obj.get("interaction_mod"),
                 return_orig=obj.get("return_orig"),
                 return_mod=obj.get("return_mod"),
                 exc_orig=obj.get("exc_orig"),
                 exc_mod=obj.get("exc_mod"),
                 state_orig=obj.get("state_orig"),
                 state_mod=obj.get("state_mod"),
+                interaction_orig=obj.get("interaction_orig"),
+                interaction_mod=obj.get("interaction_mod"),
             )
         )
     return diffs

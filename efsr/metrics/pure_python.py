@@ -141,6 +141,21 @@ def _find_class(tree, class_name: str | None):
     raise ValueError(f"class {class_name!r} not found among {[c.name for c in classes]}")
 
 
+def count_declared_methods(java_file: Path, class_name: str | None = None) -> int:
+    """Number of declared methods in a class, straight from source.
+
+    Used to populate StructuralMetrics.nom regardless of which metrics
+    backend (ckjm or pure-Python) computed the rest of the panel -- ckjm's
+    standard column set has no direct total-method-count column, so the
+    metric(T) method-count gate (Section III-B) always sources `nom` from
+    here rather than from the chosen backend.
+    """
+    source = Path(java_file).read_text()
+    tree = javalang.parse.parse(source)
+    class_node = _find_class(tree, class_name)
+    return len(class_node.methods)
+
+
 class PureJavaSourceExtractor:
     """Fallback metrics backend operating directly on .java source files."""
 
@@ -183,5 +198,5 @@ class PureJavaSourceExtractor:
 
         return StructuralMetrics(
             cc=cc, wmc=wmc, ce=float(len(coupling)), cbo=float(len(coupling)),
-            rfc=rfc, lcom=lcom, dit=dit, loc=loc,
+            rfc=rfc, lcom=lcom, dit=dit, loc=loc, nom=float(len(class_node.methods)),
         )

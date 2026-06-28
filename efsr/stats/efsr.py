@@ -63,7 +63,12 @@ def compute_efsr(
 def compute_efsr_from_rows(rows: list[dict], process: str, config: PipelineConfig = DEFAULT_CONFIG) -> EFSRResult:
     """Compute EFSR(S) directly from ResultsStore rows for one process.
 
-    Pi(S) membership = admitted == True AND excluded_nondeterministic == False.
+    Pi(S) membership = admitted == True AND retained == True AND
+    excluded_nondeterministic == False. `retained` excludes the protocol-
+    passing-but-not-selected siblings of an LLM strategy's 3x sampling
+    (Section III-D); it defaults to True for rows/processes that never
+    went through that selection step (JDeodorant, Human, or rows written
+    before this field existed).
     DIVERGE membership = verdict == "DIVERGE" (Stage 8-confirmed only).
     Rows with verdict == "ERROR" are excluded from the denominator with a
     warning -- they represent transformations the pipeline could not
@@ -74,7 +79,7 @@ def compute_efsr_from_rows(rows: list[dict], process: str, config: PipelineConfi
     process_rows = [r for r in rows if r.get("process") == process]
     pi_s = [
         r for r in process_rows
-        if _to_bool(r.get("admitted")) and not _to_bool(r.get("excluded_nondeterministic"))
+        if _to_bool(r.get("admitted")) and _retained(r) and not _to_bool(r.get("excluded_nondeterministic"))
     ]
     usable = [r for r in pi_s if r.get("verdict") != "ERROR"]
     error_count = len(pi_s) - len(usable)
@@ -95,3 +100,11 @@ def _to_bool(value) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in ("true", "1", "yes")
+
+
+def _retained(row: dict) -> bool:
+    """`retained` defaults to True when absent/empty (see compute_efsr_from_rows)."""
+    value = row.get("retained", "")
+    if value in (None, ""):
+        return True
+    return _to_bool(value)

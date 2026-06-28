@@ -1,9 +1,11 @@
 import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
@@ -23,12 +25,19 @@ import java.util.List;
  *
  * Invokes one method (static or instance, no-arg constructor for
  * instances) with the same arguments against both versions and reports,
- * per repetition, the three directly inspectable channels: return value,
- * thrown exception, and post-call object field state. (The fourth channel
- * in the taxonomy -- observable interaction with collaborators -- requires
- * instrumenting the collaborator, which is out of scope for this generic
- * probe; see efsr/difftest/dual_harness.py for how it is combined with the
- * JUnit-suite-level diff that EvoSuite/Randoop-generated tests go through.)
+ * per repetition, all four taxonomy channels: return value, thrown
+ * exception, post-call object field state, and observable interaction
+ * with collaborators. The fourth channel is captured by replacing every
+ * interface-typed instance field of the target with a dynamic
+ * {@link Proxy} that records each call (method name + argument values)
+ * made through it before delegating to the real collaborator, so the
+ * target's own behaviour is unaffected. This covers the common
+ * dependency-injected-collaborator pattern (a field typed as an
+ * interface); concrete-typed collaborator fields are not instrumented and
+ * fall back to the State channel via field-value comparison instead.
+ * Interface-typed fields are therefore excluded from the State channel's
+ * field dump -- their proxy's identity is not behaviourally meaningful,
+ * only the calls recorded through it are.
  *
  * Usage:
  *   java -cp dualrunner.jar DualRunner <originalClasspath> <modifiedClasspath> \
@@ -134,6 +143,7 @@ public final class DualRunner {
         String excClass;
         String excMessage;
         String stateRepr;
+        String interactionRepr;
     }
 
     private static Invocation invoke(
@@ -144,10 +154,12 @@ public final class DualRunner {
             Class<?> clazz = Class.forName(className, true, loader);
             Method method = clazz.getMethod(methodName, paramTypes);
             Object target = null;
+            List<String> interactionLog = new ArrayList<>();
             if (!Modifier.isStatic(method.getModifiers())) {
                 Constructor<?> ctor = clazz.getDeclaredConstructor();
                 ctor.setAccessible(true);
                 target = ctor.newInstance();
+                instrumentCollaborators(target, interactionLog);
             }
             try {
                 Object result = method.invoke(target, argValues);
@@ -159,6 +171,7 @@ public final class DualRunner {
             }
             if (target != null) {
                 inv.stateRepr = dumpFieldState(target);
+                inv.interactionRepr = String.join(";", interactionLog);
             }
         } catch (Exception e) {
             inv.excClass = "HARNESS_ERROR:" + e.getClass().getName();
@@ -167,10 +180,75 @@ public final class DualRunner {
         return inv;
     }
 
+    /**
+     * Replaces every non-null, interface-typed instance field of `target`
+     * with a recording {@link Proxy} that logs calls made through it
+     * (method name + argument values, in call order) into `log`, then
+     * delegates to the original collaborator so behaviour is unchanged.
+     */
+    private static void instrumentCollaborators(Object target, List<String> log) throws IllegalAccessException {
+        for (Field f : target.getClass().getDeclaredFields()) {
+            if (Modifier.isStatic(f.getModifiers()) || f.isSynthetic()) {
+                continue;
+            }
+            Class<?> type = f.getType();
+            if (!type.isInterface()) {
+                continue;
+            }
+            f.setAccessible(true);
+            Object collaborator = f.get(target);
+            if (collaborator == null || Proxy.isProxyClass(collaborator.getClass())) {
+                continue;
+            }
+            Object proxy = Proxy.newProxyInstance(
+                type.getClassLoader(), new Class<?>[]{type}, new RecordingHandler(collaborator, log));
+            f.set(target, proxy);
+        }
+    }
+
+    private static final class RecordingHandler implements InvocationHandler {
+        private final Object delegate;
+        private final List<String> log;
+
+        RecordingHandler(Object delegate, List<String> log) {
+            this.delegate = delegate;
+            this.log = log;
+        }
+
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            if (method.getDeclaringClass() != Object.class) {
+                StringBuilder call = new StringBuilder(method.getName()).append("(");
+                if (args != null) {
+                    for (int i = 0; i < args.length; i++) {
+                        if (i > 0) {
+                            call.append(",");
+                        }
+                        call.append(String.valueOf(args[i]));
+                    }
+                }
+                call.append(")");
+                log.add(call.toString());
+            }
+            try {
+                return method.invoke(delegate, args);
+            } catch (InvocationTargetException ite) {
+                throw ite.getCause() != null ? ite.getCause() : ite;
+            }
+        }
+    }
+
     private static String dumpFieldState(Object target) throws IllegalAccessException {
         List<String> parts = new ArrayList<>();
         for (Field f : target.getClass().getDeclaredFields()) {
             if (Modifier.isStatic(f.getModifiers()) || f.isSynthetic()) {
+                continue;
+            }
+            if (f.getType().isInterface()) {
+                // Covered by the interaction channel instead (see
+                // instrumentCollaborators): a proxy's identity/toString is
+                // not behaviourally meaningful, only the calls made
+                // through it are.
                 continue;
             }
             f.setAccessible(true);
@@ -192,7 +270,9 @@ public final class DualRunner {
         jsonField(sb, "exc_mod", mod.excClass).append(",");
         jsonField(sb, "exc_mod_msg", mod.excMessage).append(",");
         jsonField(sb, "state_orig", orig.stateRepr).append(",");
-        jsonField(sb, "state_mod", mod.stateRepr);
+        jsonField(sb, "state_mod", mod.stateRepr).append(",");
+        jsonField(sb, "interaction_orig", orig.interactionRepr).append(",");
+        jsonField(sb, "interaction_mod", mod.interactionRepr);
         sb.append("}");
         return sb.toString();
     }

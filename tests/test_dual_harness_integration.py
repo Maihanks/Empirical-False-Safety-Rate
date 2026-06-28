@@ -59,3 +59,23 @@ def test_known_divergent_fixture_reports_diverge_with_functional_category(tmp_pa
     assert confirm_channel_diffs(diffs) is True
     category, _ = classify_channel_diff(diffs[0])
     assert category == TaxonomyCategory.FUNCTIONAL
+
+
+@requires_jdk_and_harness
+def test_known_interaction_divergent_fixture_reports_interface_api_category(tmp_path):
+    case_dir = FIXTURES_DIR / "known_interaction_divergent"
+    original_classes, modified_classes = tmp_path / "orig", tmp_path / "mod"
+    _compile(case_dir / "original", original_classes)
+    _compile(case_dir / "modified", modified_classes)
+
+    diffs = run_dual_probe(
+        str(original_classes), str(modified_classes), "fixtures.pilot.known_interaction_divergent.Notifier",
+        "notify", "I:7", DEFAULT_CONFIG.replay_repetitions, DEFAULT_CONFIG,
+    )
+    assert confirm_channel_diffs(diffs) is True
+    assert diffs[0].return_differs is False
+    assert diffs[0].state_differs is False
+    assert diffs[0].interaction_differs is True
+    category, channel = classify_channel_diff(diffs[0])
+    assert category == TaxonomyCategory.INTERFACE_API
+    assert channel == "interaction"

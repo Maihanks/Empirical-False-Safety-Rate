@@ -17,15 +17,30 @@ from efsr.results import CheckStatus
 # ---- evaluate_metric (Stage 3 / Section III-B) -----------------------------
 
 def test_extract_method_metric_requires_strict_cc_reduction():
-    pre = StructuralMetrics(cc=10)
-    assert evaluate_metric(pre, StructuralMetrics(cc=5), RefactoringType.EXTRACT_METHOD) is True
-    assert evaluate_metric(pre, StructuralMetrics(cc=10), RefactoringType.EXTRACT_METHOD) is False
-    assert evaluate_metric(pre, StructuralMetrics(cc=11), RefactoringType.EXTRACT_METHOD) is False
+    pre = StructuralMetrics(cc=10, nom=3)
+    assert evaluate_metric(pre, StructuralMetrics(cc=5, nom=4), RefactoringType.EXTRACT_METHOD) is True
+    assert evaluate_metric(pre, StructuralMetrics(cc=10, nom=4), RefactoringType.EXTRACT_METHOD) is False
+    assert evaluate_metric(pre, StructuralMetrics(cc=11, nom=4), RefactoringType.EXTRACT_METHOD) is False
 
 
 def test_extract_method_metric_requires_cc_present():
     with pytest.raises(ValueError):
-        evaluate_metric(StructuralMetrics(cc=None), StructuralMetrics(cc=5), RefactoringType.EXTRACT_METHOD)
+        evaluate_metric(StructuralMetrics(cc=None, nom=3), StructuralMetrics(cc=5, nom=4), RefactoringType.EXTRACT_METHOD)
+
+
+def test_extract_method_metric_requires_nom_present():
+    with pytest.raises(ValueError):
+        evaluate_metric(StructuralMetrics(cc=10, nom=None), StructuralMetrics(cc=5, nom=4), RefactoringType.EXTRACT_METHOD)
+
+
+def test_extract_method_metric_rejects_method_count_beyond_bound():
+    from efsr.config import PipelineConfig
+
+    cfg = PipelineConfig(max_extracted_methods=2)
+    pre = StructuralMetrics(cc=10, nom=3)
+    # +2 methods is within bound, +3 is not.
+    assert evaluate_metric(pre, StructuralMetrics(cc=5, nom=5), RefactoringType.EXTRACT_METHOD, cfg) is True
+    assert evaluate_metric(pre, StructuralMetrics(cc=5, nom=6), RefactoringType.EXTRACT_METHOD, cfg) is False
 
 
 def test_extract_class_metric_requires_wmc_decrease_and_ce_non_increase():
@@ -84,7 +99,7 @@ def test_protocol_stops_at_compile_failure(tmp_path, monkeypatch):
         protocol_module, "MavenRunner",
         lambda project_dir, config: _FakeMavenRunner(project_dir, config, compile_passed=False),
     )
-    result = ThreeCheckProtocol().run(_spec(tmp_path), StructuralMetrics(cc=10), StructuralMetrics(cc=5))
+    result = ThreeCheckProtocol().run(_spec(tmp_path), StructuralMetrics(cc=10, nom=3), StructuralMetrics(cc=5, nom=4))
     assert result.compile_status == CheckStatus.FAIL
     assert result.tests_status == CheckStatus.SKIP
     assert result.metric_status == CheckStatus.SKIP
@@ -96,7 +111,7 @@ def test_protocol_stops_at_test_failure(tmp_path, monkeypatch):
         protocol_module, "MavenRunner",
         lambda project_dir, config: _FakeMavenRunner(project_dir, config, tests_passed=False),
     )
-    result = ThreeCheckProtocol().run(_spec(tmp_path), StructuralMetrics(cc=10), StructuralMetrics(cc=5))
+    result = ThreeCheckProtocol().run(_spec(tmp_path), StructuralMetrics(cc=10, nom=3), StructuralMetrics(cc=5, nom=4))
     assert result.compile_status == CheckStatus.PASS
     assert result.tests_status == CheckStatus.FAIL
     assert result.metric_status == CheckStatus.SKIP
@@ -106,7 +121,7 @@ def test_protocol_stops_at_test_failure(tmp_path, monkeypatch):
 def test_protocol_stops_at_metric_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(protocol_module, "MavenRunner", lambda project_dir, config: _FakeMavenRunner(project_dir, config))
     # post.cc == pre.cc -> metric(T) fails (no strict reduction).
-    result = ThreeCheckProtocol().run(_spec(tmp_path), StructuralMetrics(cc=10), StructuralMetrics(cc=10))
+    result = ThreeCheckProtocol().run(_spec(tmp_path), StructuralMetrics(cc=10, nom=3), StructuralMetrics(cc=10, nom=4))
     assert result.compile_status == CheckStatus.PASS
     assert result.tests_status == CheckStatus.PASS
     assert result.metric_status == CheckStatus.FAIL
@@ -115,7 +130,7 @@ def test_protocol_stops_at_metric_failure(tmp_path, monkeypatch):
 
 def test_protocol_admits_when_all_three_checks_pass(tmp_path, monkeypatch):
     monkeypatch.setattr(protocol_module, "MavenRunner", lambda project_dir, config: _FakeMavenRunner(project_dir, config))
-    result = ThreeCheckProtocol().run(_spec(tmp_path), StructuralMetrics(cc=10), StructuralMetrics(cc=5))
+    result = ThreeCheckProtocol().run(_spec(tmp_path), StructuralMetrics(cc=10, nom=3), StructuralMetrics(cc=5, nom=4))
     assert result.compile_status == CheckStatus.PASS
     assert result.tests_status == CheckStatus.PASS
     assert result.metric_status == CheckStatus.PASS

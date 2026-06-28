@@ -20,6 +20,7 @@ from efsr.config import DEFAULT_CONFIG
 from efsr.results import ResultsStore
 from efsr.stats.compare import compare_processes
 from efsr.stats.efsr import compute_efsr_from_rows
+from efsr.stats.plotting import plot_per_project_efsr
 from efsr.stats.predictors import build_predictor_frame, fit_l1_logistic
 
 
@@ -42,16 +43,18 @@ def table_i(rows: list[dict]) -> pd.DataFrame:
 
 def table_ii(rows: list[dict]) -> tuple[pd.DataFrame, dict]:
     X, y = build_predictor_frame(rows)
+    columns = ["Retained predictor", "Coefficient", "Odds ratio", "95% CI"]
     if X.empty or len(set(y.tolist())) < 2:
-        return pd.DataFrame(columns=["Retained predictor", "Coefficient", "Odds ratio"]), {}
+        return pd.DataFrame(columns=columns), {}
     fit = fit_l1_logistic(X, y, DEFAULT_CONFIG)
     records = [
         {"Retained predictor": r.name, "Coefficient": round(r.coefficient, 4),
-         "Odds ratio": round(r.odds_ratio, 4)}
+         "Odds ratio": round(r.odds_ratio, 4),
+         "95% CI": f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"}
         for r in fit.retained
     ]
     records.append({"Retained predictor": "EPV achieved", "Coefficient": "",
-                     "Odds ratio": round(fit.epv_achieved, 2)})
+                     "Odds ratio": round(fit.epv_achieved, 2), "95% CI": ""})
     summary = {
         "n_events": fit.n_events, "n_observations": fit.n_observations,
         "exploratory_only": fit.exploratory_only,
@@ -94,6 +97,11 @@ def main() -> int:
             print(f"  {c.process_a} vs {c.process_b}: U={c.statistic:.2f} p={c.p_value:.4f} "
                   f"p_bonf={c.p_value_bonferroni:.4f} delta={c.cliffs_delta:.3f} "
                   f"significant={c.significant}")
+
+    if processes:
+        fig1_path = args.out / "fig1_per_project_efsr.png"
+        plot_per_project_efsr(rows, processes, fig1_path)
+        print(f"\nFig. 1 written to {fig1_path}")
 
     t2, summary = table_ii(rows)
     print("\nTABLE II -- Retained Structural Predictors of Detectable Divergence\n")
